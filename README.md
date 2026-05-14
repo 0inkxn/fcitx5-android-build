@@ -35,10 +35,8 @@ fcitx5-android 的 release 插件需要与主程序同签名。要生成可直�
 | --- | --- |
 | `ANDROID_KEYSTORE_BASE64` | keystore/jks 文件的 base64 内容 |
 | `ANDROID_KEYSTORE_PASSWORD` | keystore 密码 |
-| `ANDROID_KEY_ALIAS` | key alias |
+| `ANDROID_KEY_ALIAS` | key alias；keystore 只有一个 key 时可省略或填错，workflow 会自动使用唯一 alias |
 | `ANDROID_KEY_PASSWORD` | key 密码，可省略；省略时剪贴板插件使用 `ANDROID_KEYSTORE_PASSWORD` |
-
-注意：当前 `fcitx5-android` 主项目的 Gradle 签名约定只接收一个 `SIGN_KEY_PWD`，即 store password 和 key password 需要相同。若你的 keystore 两个密码不同，需要先调整主项目签名逻辑。
 
 生成 base64 示例：
 
