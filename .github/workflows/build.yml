@@ -1,0 +1,169 @@
+name: Build Fcitx5 Android Suite
+
+on:
+  workflow_dispatch:
+    inputs:
+      fcitx_repository:
+        description: GitHub repository for fcitx5-android.
+        required: false
+        default: 0inkxn/fcitx5-android
+      fcitx_ref:
+        description: Branch, tag, or SHA for fcitx5-android.
+        required: false
+        default: master
+      syncclip_repository:
+        description: GitHub repository for Fcitx5-SyncClipboard.
+        required: false
+        default: 0inkxn/Fcitx5-SyncClipboard
+      syncclip_ref:
+        description: Branch, tag, or SHA for Fcitx5-SyncClipboard.
+        required: false
+        default: master
+      build_type:
+        description: Android build variant.
+        type: choice
+        options:
+          - release
+          - debug
+        required: true
+        default: release
+      build_abi:
+        description: Optional fcitx5-android ABI list, for example arm64-v8a or arm64-v8a,x86_64.
+        required: false
+        default: ""
+      require_signing:
+        description: Fail release builds when signing secrets are missing.
+        type: boolean
+        required: true
+        default: true
+      publish_release:
+        description: Publish APKs to a GitHub Release after a successful build.
+        type: boolean
+        required: true
+        default: false
+      release_tag:
+        description: Optional release tag. Defaults to build-YYYYMMDD-run_number.
+        required: false
+        default: ""
+  repository_dispatch:
+    types:
+      - build
+      - build-fcitx5-android
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  FCITX_DIR: sources/fcitx5-android
+  SYNCCLIP_DIR: sources/Fcitx5-SyncClipboard
+  ARTIFACT_DIR: artifacts
+  FCITX_REPOSITORY: ${{ github.event.client_payload.fcitx_repository || github.event.inputs.fcitx_repository || vars.FCITX_REPOSITORY || '0inkxn/fcitx5-android' }}
+  FCITX_REF: ${{ github.event.client_payload.fcitx_ref || github.event.inputs.fcitx_ref || vars.FCITX_REF || 'master' }}
+  SYNCCLIP_REPOSITORY: ${{ github.event.client_payload.syncclip_repository || github.event.inputs.syncclip_repository || vars.SYNCCLIP_REPOSITORY || '0inkxn/Fcitx5-SyncClipboard' }}
+  SYNCCLIP_REF: ${{ github.event.client_payload.syncclip_ref || github.event.inputs.syncclip_ref || vars.SYNCCLIP_REF || 'master' }}
+  BUILD_TYPE: ${{ github.event.client_payload.build_type || github.event.inputs.build_type || vars.BUILD_TYPE || 'release' }}
+  BUILD_ABI: ${{ github.event.client_payload.build_abi || github.event.inputs.build_abi || vars.BUILD_ABI || '' }}
+  REQUIRE_SIGNING: ${{ github.event.client_payload.require_signing || github.event.inputs.require_signing || vars.REQUIRE_SIGNING || 'true' }}
+  PUBLISH_RELEASE: ${{ github.event.client_payload.publish_release || github.event.inputs.publish_release || 'false' }}
+  RELEASE_TAG: ${{ github.event.client_payload.release_tag || github.event.inputs.release_tag || '' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout build scripts
+        uses: actions/checkout@v6
+
+      - name: Checkout fcitx5-android
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.FCITX_REPOSITORY }}
+          ref: ${{ env.FCITX_REF }}
+          path: ${{ env.FCITX_DIR }}
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Checkout Fcitx5-SyncClipboard
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ env.SYNCCLIP_REPOSITORY }}
+          ref: ${{ env.SYNCCLIP_REF }}
+          path: ${{ env.SYNCCLIP_DIR }}
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: |
+            platform-tools
+            platforms;android-34
+            platforms;android-36
+            build-tools;34.0.0
+            build-tools;36.1.0
+            cmake;3.31.6
+            ndk;28.0.13004108
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          sudo apt install --yes extra-cmake-modules gettext
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Prepare release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: scripts/prepare-signing.sh
+
+      - name: Build fcitx5-android
+        run: scripts/build-fcitx5-android.sh "$FCITX_DIR" "$BUILD_TYPE"
+
+      - name: Build Fcitx5-SyncClipboard
+        run: scripts/build-syncclipboard.sh "$SYNCCLIP_DIR" "$BUILD_TYPE"
+
+      - name: Collect APK artifacts
+        run: scripts/collect-artifacts.sh "$FCITX_DIR" "$SYNCCLIP_DIR" "$ARTIFACT_DIR" "$BUILD_TYPE"
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: fcitx5-android-suite-${{ env.BUILD_TYPE }}-${{ github.run_number }}
+          path: ${{ env.ARTIFACT_DIR }}
+          if-no-files-found: error
+
+      - name: Resolve release tag
+        id: release
+        if: ${{ env.PUBLISH_RELEASE == 'true' }}
+        run: |
+          if [[ -n "$RELEASE_TAG" ]]; then
+            tag="$RELEASE_TAG"
+          else
+            tag="build-$(date -u +%Y%m%d)-${GITHUB_RUN_NUMBER}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        if: ${{ env.PUBLISH_RELEASE == 'true' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          name: ${{ steps.release.outputs.tag }}
+          files: |
+            artifacts/**/*.apk
+            artifacts/BUILD_INFO.txt
+            artifacts/SHA256SUMS.txt
+          generate_release_notes: true

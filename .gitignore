@@ -1,0 +1,11 @@
+.DS_Store
+.gradle/
+artifacts/
+sources/
+*.apk
+*.aab
+*.apks
+*.idsig
+*.jks
+*.keystore
+local.properties
