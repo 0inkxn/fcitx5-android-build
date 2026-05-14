@@ -18,12 +18,14 @@ chmod +x ./gradlew
 gradle_args=(--no-daemon --stacktrace)
 
 if [[ -n "${BUILD_ABI:-}" ]]; then
+  # The upstream Gradle convention reads BUILD_ABI to limit native split APKs.
   export BUILD_ABI
 fi
 
 if [[ "$build_type" == "release" && "${HAS_RELEASE_SIGNING:-false}" == "true" ]]; then
   export SIGN_KEY_FILE SIGN_KEY_PWD SIGN_KEY_ALIAS
   signing_init="$RUNNER_TEMP/fcitx5-android-signing.gradle"
+  # Override release signing explicitly so storePassword and keyPassword may differ.
   cat > "$signing_init" <<'EOF'
 gradle.beforeProject { p ->
     p.afterEvaluate {
@@ -49,4 +51,5 @@ EOF
 fi
 
 variant_cap="${build_type^}"
+# Build the main APK and all bundled fcitx5-android plugin APKs in one Gradle invocation.
 ./gradlew "${gradle_args[@]}" ":app:assemble${variant_cap}" ":assemble${variant_cap}Plugins"

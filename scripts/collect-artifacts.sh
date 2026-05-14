@@ -29,8 +29,10 @@ copy_apks() {
 rm -rf "$artifact_dir"
 mkdir -p "$artifact_dir/main-app" "$artifact_dir/bundled-plugins" "$artifact_dir/syncclipboard"
 
+# fcitx5-android emits split APKs under per-module Gradle output directories.
 copy_apks "$fcitx_dir/app/build/outputs/apk/$build_type" "$artifact_dir/main-app" "fcitx5-android"
 
+# Bundled plugins are optional per source checkout; collect whatever was built.
 for plugin_dir in "$fcitx_dir"/plugin/*; do
   [[ -d "$plugin_dir" ]] || continue
   plugin_name="$(basename "$plugin_dir")"
@@ -44,6 +46,8 @@ if (( apk_count == 0 )); then
   exit 1
 fi
 
+# Keep commit provenance beside the APKs so a downloaded artifact can be traced
+# back without opening the Actions run page.
 {
   echo "Build type: $build_type"
   echo "Build ABI: ${BUILD_ABI:-all}"

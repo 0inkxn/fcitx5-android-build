@@ -5,6 +5,7 @@ build_type="${BUILD_TYPE:-release}"
 require_signing="${REQUIRE_SIGNING:-true}"
 
 write_env() {
+  # Values written to GITHUB_ENV are available to later workflow steps only.
   printf '%s=%s\n' "$1" "$2" >> "$GITHUB_ENV"
 }
 
@@ -31,6 +32,8 @@ keystore_path="$RUNNER_TEMP/android-release.jks"
 printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
 chmod 600 "$keystore_path"
 
+# Validate the keystore before Gradle starts. Otherwise a wrong alias can fail
+# ten minutes later during APK packaging.
 if ! aliases="$(keytool -list -v -keystore "$keystore_path" -storepass "$ANDROID_KEYSTORE_PASSWORD" 2>/dev/null | awk -F': ' '/Alias name:/{print $2}')"; then
   echo "::error::Failed to read the signing keystore. Check ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD."
   exit 1
@@ -43,6 +46,7 @@ if [[ "$alias_count" == "0" ]]; then
 fi
 
 resolved_alias="${ANDROID_KEY_ALIAS:-}"
+# A single-key keystore is unambiguous, so tolerate a missing or stale alias secret.
 if [[ -z "$resolved_alias" ]]; then
   if [[ "$alias_count" == "1" ]]; then
     resolved_alias="$(printf '%s\n' "$aliases" | sed '/^$/d' | head -n 1)"
@@ -61,6 +65,8 @@ elif ! printf '%s\n' "$aliases" | grep -Fxq "$resolved_alias"; then
   fi
 fi
 
+# fcitx5-android reads SIGN_KEY_* from its convention plugin. The standalone
+# SyncClipboard project uses KEY* variables through an injected Gradle init script.
 write_env HAS_RELEASE_SIGNING true
 write_env SIGN_KEY_FILE "$keystore_path"
 write_env SIGN_KEY_PWD "$ANDROID_KEYSTORE_PASSWORD"

@@ -1,7 +1,12 @@
 .DS_Store
+
+# Local Gradle state and workflow output directories.
 .gradle/
 artifacts/
 sources/
+
+# Android signing and package outputs should come from Actions artifacts,
+# not from local ad-hoc files committed to this repository.
 *.apk
 *.aab
 *.apks

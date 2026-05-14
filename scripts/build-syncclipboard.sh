@@ -19,6 +19,8 @@ gradle_args=(--no-daemon --stacktrace)
 
 if [[ "$build_type" == "release" && "${HAS_RELEASE_SIGNING:-false}" == "true" ]]; then
   signing_init="$RUNNER_TEMP/syncclipboard-signing.gradle"
+  # The standalone plugin currently signs release builds with its source-project
+  # config. Inject the same key used by fcitx5-android so Android accepts it.
   cat > "$signing_init" <<'EOF'
 gradle.beforeProject { p ->
     p.afterEvaluate {

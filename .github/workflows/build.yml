@@ -58,9 +58,12 @@ defaults:
     shell: bash
 
 env:
+  # Source checkouts and generated APKs live under the build repo workspace.
   FCITX_DIR: sources/fcitx5-android
   SYNCCLIP_DIR: sources/Fcitx5-SyncClipboard
   ARTIFACT_DIR: artifacts
+  # Input precedence: repository_dispatch payload, manual workflow input,
+  # repository variable, then the hard-coded default.
   FCITX_REPOSITORY: ${{ github.event.client_payload.fcitx_repository || github.event.inputs.fcitx_repository || vars.FCITX_REPOSITORY || '0inkxn/fcitx5-android' }}
   FCITX_REF: ${{ github.event.client_payload.fcitx_ref || github.event.inputs.fcitx_ref || vars.FCITX_REF || 'master' }}
   SYNCCLIP_REPOSITORY: ${{ github.event.client_payload.syncclip_repository || github.event.inputs.syncclip_repository || vars.SYNCCLIP_REPOSITORY || '0inkxn/Fcitx5-SyncClipboard' }}
@@ -104,6 +107,8 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
+      # Keep package installation in a shell step. setup-android@v3 does not
+      # split YAML block scalars into separate sdkmanager package arguments.
       - name: Install Android SDK packages
         run: |
           sdkmanager --install \
@@ -123,6 +128,8 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v5
 
+      # Release APKs must share one signing key because fcitx5-android accepts
+      # plugin APKs only when they are signed like the main app.
       - name: Prepare release signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -140,6 +147,7 @@ jobs:
       - name: Collect APK artifacts
         run: scripts/collect-artifacts.sh "$FCITX_DIR" "$SYNCCLIP_DIR" "$ARTIFACT_DIR" "$BUILD_TYPE"
 
+      # Artifacts are useful for every run, even when a GitHub Release is not requested.
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v6
         with:
